@@ -17,7 +17,10 @@
 
 package com.owncloud.android.media;
 
+import java.io.IOException;
+
 import android.accounts.Account;
+import android.annotation.TargetApi;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -31,11 +34,10 @@ import android.media.MediaPlayer.OnErrorListener;
 import android.media.MediaPlayer.OnPreparedListener;
 import android.net.wifi.WifiManager;
 import android.net.wifi.WifiManager.WifiLock;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.widget.Toast;
-
-import java.io.IOException;
 
 import com.owncloud.android.Log_OC;
 import com.owncloud.android.R;
@@ -51,8 +53,17 @@ import com.owncloud.android.ui.activity.FileDisplayActivity;
  * 
  * @author David A. Velasco
  */
-public class MediaService extends Service implements OnCompletionListener, OnPreparedListener,
-                OnErrorListener, AudioManager.OnAudioFocusChangeListener {
+public class MediaService extends Service implements OnCompletionListener, OnPreparedListener, OnErrorListener {
+
+    @TargetApi(Build.VERSION_CODES.FROYO)
+    class OnAudioFocusChangeListener implements AudioManager.OnAudioFocusChangeListener {
+
+        @Override
+        public void onAudioFocusChange(int focusChange) {
+            MediaService.this.onAudioFocusChange(focusChange);
+        }
+
+    }
 
     private static final String TAG = MediaService.class.getSimpleName();
 
@@ -74,20 +85,21 @@ public class MediaService extends Service implements OnCompletionListener, OnPre
 
     /** Time To keep the control panel visible when the user does not use it */
     public static final int MEDIA_CONTROL_SHORT_LIFE = 4000;
-    
+
     /** Time To keep the control panel visible when the user does not use it */
     public static final int MEDIA_CONTROL_PERMANENT = 0;
-    
+
     /** Volume to set when audio focus is lost and ducking is allowed */
     private static final float DUCK_VOLUME = 0.1f;
 
     /** Media player instance */
     private MediaPlayer mPlayer = null;
-    
+
     /** Reference to the system AudioManager */
     private AudioManager mAudioManager = null;
 
-    
+    private OnAudioFocusChangeListener audioFocusChangeListener = null;
+
     /** Values to indicate the state of the service */
     enum State {
         STOPPED,
@@ -224,6 +236,10 @@ public class MediaService extends Service implements OnCompletionListener, OnPre
 
         mNotificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         mAudioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.FROYO) {
+            audioFocusChangeListener = new OnAudioFocusChangeListener();
+            return;
+        }
         mBinder = new MediaServiceBinder(this);
     }
 
@@ -366,11 +382,15 @@ public class MediaService extends Service implements OnCompletionListener, OnPre
     /**
      * Fully releases the audio focus.
      */
+    @TargetApi(Build.VERSION_CODES.FROYO)
     private void giveUpAudioFocus() {
-        if (mAudioFocus == AudioFocus.FOCUS 
-                && mAudioManager != null  
-                && AudioManager.AUDIOFOCUS_REQUEST_GRANTED == mAudioManager.abandonAudioFocus(this))  {
-            
+        if (mAudioFocus == AudioFocus.FOCUS && mAudioManager != null) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.FROYO
+                    && AudioManager.AUDIOFOCUS_REQUEST_GRANTED != mAudioManager
+                            .abandonAudioFocus(audioFocusChangeListener)) {
+                // >=2.2 and failed to abandon
+                return;
+            }
             mAudioFocus = AudioFocus.NO_FOCUS;
         }
     }
@@ -403,17 +423,18 @@ public class MediaService extends Service implements OnCompletionListener, OnPre
         }
     }
 
-    
     /**
-     * Requests the audio focus to the Audio Manager 
+     * Requests the audio focus to the Audio Manager
      */
+    @TargetApi(Build.VERSION_CODES.FROYO)
     private void tryToGetAudioFocus() {
-        if (mAudioFocus != AudioFocus.FOCUS 
-                && mAudioManager != null 
-                && (AudioManager.AUDIOFOCUS_REQUEST_GRANTED == mAudioManager.requestAudioFocus( this,
-                                                                                                AudioManager.STREAM_MUSIC, 
-                                                                                                AudioManager.AUDIOFOCUS_GAIN))
-                ) {
+        if (mAudioFocus != AudioFocus.FOCUS && mAudioManager != null) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.FROYO
+                    && AudioManager.AUDIOFOCUS_REQUEST_GRANTED != mAudioManager.requestAudioFocus(
+                            audioFocusChangeListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)) {
+                // >=2.2 and failed to request
+                return;
+            }
             mAudioFocus = AudioFocus.FOCUS;
         }
     }
@@ -606,7 +627,7 @@ public class MediaService extends Service implements OnCompletionListener, OnPre
      * 
      * {@inheritDoc}
      */
-    @Override
+    @TargetApi(Build.VERSION_CODES.FROYO)
     public void onAudioFocusChange(int focusChange) {
         if (focusChange > 0) {
             // focus gain; check AudioManager.AUDIOFOCUS_* values
@@ -614,16 +635,19 @@ public class MediaService extends Service implements OnCompletionListener, OnPre
             // restart media player with new focus settings
             if (mState == State.PLAYING)
                 configAndStartMediaPlayer();
-            
+
         } else if (focusChange < 0) {
             // focus loss; check AudioManager.AUDIOFOCUS_* values
-            boolean canDuck = AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK == focusChange;
-                mAudioFocus = canDuck ? AudioFocus.NO_FOCUS_CAN_DUCK : AudioFocus.NO_FOCUS;
-                // start/restart/pause media player with new focus settings
-                if (mPlayer != null && mPlayer.isPlaying())
-                    configAndStartMediaPlayer();
+            boolean canDuck = false;
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.FROYO) {
+                canDuck = AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK == focusChange;
+            }
+            mAudioFocus = canDuck ? AudioFocus.NO_FOCUS_CAN_DUCK : AudioFocus.NO_FOCUS;
+            // start/restart/pause media player with new focus settings
+            if (mPlayer != null && mPlayer.isPlaying())
+                configAndStartMediaPlayer();
         }
-        
+
     }
 
     /**
