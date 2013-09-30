@@ -178,6 +178,11 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
             </intent-filter>
         </receiver>
+        <receiver android:name=".syncadapter.ManualSyncReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="com.owncloud.MANUAL_SYNC"/>
+            </intent-filter>
+        </receiver>
         <service android:name=".files.services.FileObserverService"/>
         
     </application>
