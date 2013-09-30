@@ -27,22 +27,15 @@ import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
+import java.util.Properties;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 
 import org.apache.commons.httpclient.MultiThreadedHttpConnectionManager;
-import org.apache.commons.httpclient.methods.GetMethod;
 import org.apache.commons.httpclient.protocol.Protocol;
 import org.apache.http.conn.ssl.BrowserCompatHostnameVerifier;
 import org.apache.http.conn.ssl.X509HostnameVerifier;
-
-import com.owncloud.android.authentication.AccountAuthenticator;
-import com.owncloud.android.authentication.AccountUtils;
-import com.owncloud.android.authentication.AccountUtils.AccountNotFoundException;
-import com.owncloud.android.Log_OC;
-
-import eu.alefzero.webdav.WebdavClient;
 
 import android.accounts.Account;
 import android.accounts.AccountManager;
@@ -54,6 +47,13 @@ import android.content.Context;
 import android.net.Uri;
 import android.os.Bundle;
 
+import com.owncloud.android.Log_OC;
+import com.owncloud.android.authentication.AccountAuthenticator;
+import com.owncloud.android.authentication.AccountUtils;
+import com.owncloud.android.authentication.AccountUtils.AccountNotFoundException;
+
+import eu.alefzero.webdav.WebdavClient;
+
 public class OwnCloudClientUtils {
     
     final private static String TAG = OwnCloudClientUtils.class.getSimpleName();
@@ -63,6 +63,9 @@ public class OwnCloudClientUtils {
     
     /** Default timeout for establishing a connection */
     public static final int DEFAULT_CONNECTION_TIMEOUT = 60000;
+
+    private static final String PROXY_HOST = "http.proxyHost";
+    private static final String PROXY_PORT = "http.proxyPort";
 
     /** Connection manager for all the WebdavClients */
     private static MultiThreadedHttpConnectionManager mConnManager = null;
@@ -94,7 +97,7 @@ public class OwnCloudClientUtils {
         AccountManager am = AccountManager.get(appContext);
         boolean isOauth2 = am.getUserData(account, AccountAuthenticator.KEY_SUPPORTS_OAUTH2) != null;   // TODO avoid calling to getUserData here
         boolean isSamlSso = am.getUserData(account, AccountAuthenticator.KEY_SUPPORTS_SAML_WEB_SSO) != null;
-        WebdavClient client = createOwnCloudClient(uri, appContext, !isSamlSso);
+        WebdavClient client = createOwnCloudClient(uri, appContext, true);
         if (isOauth2) {    
             String accessToken = am.blockingGetAuthToken(account, AccountAuthenticator.AUTH_TOKEN_TYPE_ACCESS_TOKEN, false);
             client.setBearerCredentials(accessToken);   // TODO not assume that the access token is a bearer token
@@ -119,7 +122,7 @@ public class OwnCloudClientUtils {
         AccountManager am = AccountManager.get(appContext);
         boolean isOauth2 = am.getUserData(account, AccountAuthenticator.KEY_SUPPORTS_OAUTH2) != null;   // TODO avoid calling to getUserData here
         boolean isSamlSso = am.getUserData(account, AccountAuthenticator.KEY_SUPPORTS_SAML_WEB_SSO) != null;
-        WebdavClient client = createOwnCloudClient(uri, appContext, !isSamlSso);
+        WebdavClient client = createOwnCloudClient(uri, appContext, true);
         
         if (isOauth2) {    // TODO avoid a call to getUserData here
             AccountManagerFuture<Bundle> future =  am.getAuthToken(account, AccountAuthenticator.AUTH_TOKEN_TYPE_ACCESS_TOKEN, null, currentActivity, null, null);
@@ -170,7 +173,22 @@ public class OwnCloudClientUtils {
         client.setDefaultTimeouts(DEFAULT_DATA_TIMEOUT, DEFAULT_CONNECTION_TIMEOUT);
         client.setBaseUri(uri);
         client.setFollowRedirects(followRedirects);
-        
+        String proxyHost = null;
+        int proxyPort = 0;
+        Properties props = System.getProperties();
+        if (props.containsKey(PROXY_HOST)) {
+            proxyHost = props.getProperty(PROXY_HOST);
+        }
+        if (props.containsKey(PROXY_PORT)) {
+            try {
+                proxyPort = Integer.parseInt(props.getProperty(PROXY_PORT));
+            } catch (Exception e) {
+            }
+        }
+        if (proxyHost != null && proxyPort > 0) {
+            Log_OC.d(TAG, "Proxy config: " + proxyHost + ":" + proxyPort);
+            client.getHostConfiguration().setProxy(proxyHost, proxyPort);
+        }
         return client;
     }
     
