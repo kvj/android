@@ -37,11 +37,12 @@ import android.widget.Toast;
 
 import java.io.IOException;
 
-import com.owncloud.android.Log_OC;
 import com.owncloud.android.R;
 import com.owncloud.android.datamodel.OCFile;
 import com.owncloud.android.ui.activity.FileActivity;
 import com.owncloud.android.ui.activity.FileDisplayActivity;
+import com.owncloud.android.utils.Log_OC;
+
 
 /**
  * Service that handles media playback, both audio and video. 
@@ -217,6 +218,7 @@ public class MediaService extends Service implements OnCompletionListener, OnPre
      */
     @Override
     public void onCreate() {
+        super.onCreate();
         Log_OC.d(TAG, "Creating ownCloud media service");
 
         mWifiLock = ((WifiManager) getSystemService(Context.WIFI_SERVICE)).
@@ -636,6 +638,7 @@ public class MediaService extends Service implements OnCompletionListener, OnPre
         mState = State.STOPPED;
         releaseResources(true);
         giveUpAudioFocus();
+        super.onDestroy();
     }
     
 

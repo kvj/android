@@ -18,11 +18,19 @@
 
 package com.owncloud.android.authentication;
 
+import com.owncloud.android.MainApp;
+import com.owncloud.android.R;
+
 import android.accounts.*;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
-import com.owncloud.android.Log_OC;
+import android.os.Handler;
+import android.widget.Toast;
+
+import com.owncloud.android.lib.common.accounts.AccountTypeUtils;
+import com.owncloud.android.utils.Log_OC;
+
 
 /**
  *  Authenticator for ownCloud accounts.
@@ -40,54 +48,21 @@ public class AccountAuthenticator extends AbstractAccountAuthenticator {
      * Is used by android system to assign accounts to authenticators. Should be
      * used by application and all extensions.
      */
-    public static final String ACCOUNT_TYPE = "owncloud";
-    public static final String AUTHORITY = "org.owncloud";
-    public static final String AUTH_TOKEN_TYPE = "org.owncloud";
-    public static final String AUTH_TOKEN_TYPE_PASSWORD = "owncloud.password";
-    public static final String AUTH_TOKEN_TYPE_ACCESS_TOKEN = "owncloud.oauth2.access_token";
-    public static final String AUTH_TOKEN_TYPE_REFRESH_TOKEN = "owncloud.oauth2.refresh_token";
-    public static final String AUTH_TOKEN_TYPE_SAML_WEB_SSO_SESSION_COOKIE = "owncloud.saml.web_sso.session_cookie";
-
     public static final String KEY_AUTH_TOKEN_TYPE = "authTokenType";
     public static final String KEY_REQUIRED_FEATURES = "requiredFeatures";
     public static final String KEY_LOGIN_OPTIONS = "loginOptions";
     public static final String KEY_ACCOUNT = "account";
     
-    /**
-     * Value under this key should handle path to webdav php script. Will be
-     * removed and usage should be replaced by combining
-     * {@link com.owncloud.android.authentication.AuthenticatorActivity.KEY_OC_BASE_URL} and
-     * {@link com.owncloud.android.utils.OwnCloudVersion}
-     * 
-     * @deprecated
-     */
-    public static final String KEY_OC_URL = "oc_url";
-    /**
-     * Version should be 3 numbers separated by dot so it can be parsed by
-     * {@link com.owncloud.android.utils.OwnCloudVersion}
-     */
-    public static final String KEY_OC_VERSION = "oc_version";
-    /**
-     * Base url should point to owncloud installation without trailing / ie:
-     * http://server/path or https://owncloud.server
-     */
-    public static final String KEY_OC_BASE_URL = "oc_base_url";
-    /**
-     * Flag signaling if the ownCloud server can be accessed with OAuth2 access tokens.
-     */
-    public static final String KEY_SUPPORTS_OAUTH2 = "oc_supports_oauth2";
-    /**
-     * Flag signaling if the ownCloud server can be accessed with session cookies from SAML-based web single-sign-on.
-     */
-    public static final String KEY_SUPPORTS_SAML_WEB_SSO = "oc_supports_saml_web_sso";
-    
     private static final String TAG = AccountAuthenticator.class.getSimpleName();
     
     private Context mContext;
+    
+    private Handler mHandler;
 
     public AccountAuthenticator(Context context) {
         super(context);
         mContext = context;
+        mHandler = new Handler();
     }
 
     /**
@@ -100,25 +75,50 @@ public class AccountAuthenticator extends AbstractAccountAuthenticator {
             throws NetworkErrorException {
         Log_OC.i(TAG, "Adding account with type " + accountType
                 + " and auth token " + authTokenType);
-        try {
-            validateAccountType(accountType);
-        } catch (AuthenticatorException e) {
-            Log_OC.e(TAG, "Failed to validate account type " + accountType + ": "
-                    + e.getMessage());
-            e.printStackTrace();
-            return e.getFailureBundle();
-        }
-        final Intent intent = new Intent(mContext, AuthenticatorActivity.class);
-        intent.putExtra(AccountManager.KEY_ACCOUNT_AUTHENTICATOR_RESPONSE, response);
-        intent.putExtra(KEY_AUTH_TOKEN_TYPE, authTokenType);
-        intent.putExtra(KEY_REQUIRED_FEATURES, requiredFeatures);
-        intent.putExtra(KEY_LOGIN_OPTIONS, options);
-        intent.putExtra(AuthenticatorActivity.EXTRA_ACTION, AuthenticatorActivity.ACTION_CREATE);
-
-        setIntentFlags(intent);
         
         final Bundle bundle = new Bundle();
-        bundle.putParcelable(AccountManager.KEY_INTENT, intent);
+        
+        AccountManager accountManager = AccountManager.get(mContext);
+        Account[] accounts = accountManager.getAccountsByType(MainApp.getAccountType());
+        
+        if (mContext.getResources().getBoolean(R.bool.multiaccount_support) || accounts.length < 1) {
+            try {
+                validateAccountType(accountType);
+            } catch (AuthenticatorException e) {
+                Log_OC.e(TAG, "Failed to validate account type " + accountType + ": "
+                        + e.getMessage());
+                e.printStackTrace();
+                return e.getFailureBundle();
+            }
+            
+            final Intent intent = new Intent(mContext, AuthenticatorActivity.class);
+            intent.putExtra(AccountManager.KEY_ACCOUNT_AUTHENTICATOR_RESPONSE, response);
+            intent.putExtra(KEY_AUTH_TOKEN_TYPE, authTokenType);
+            intent.putExtra(KEY_REQUIRED_FEATURES, requiredFeatures);
+            intent.putExtra(KEY_LOGIN_OPTIONS, options);
+            intent.putExtra(AuthenticatorActivity.EXTRA_ACTION, AuthenticatorActivity.ACTION_CREATE);
+
+            setIntentFlags(intent);
+            
+            bundle.putParcelable(AccountManager.KEY_INTENT, intent);
+        
+        } else {
+
+            // Return an error
+            bundle.putInt(AccountManager.KEY_ERROR_CODE, AccountManager.ERROR_CODE_UNSUPPORTED_OPERATION);
+            final String message = String.format(mContext.getString(R.string.auth_unsupported_multiaccount), mContext.getString(R.string.app_name)); 
+            bundle.putString(AccountManager.KEY_ERROR_MESSAGE, message);
+           
+            mHandler.post(new Runnable() {
+
+                @Override
+                public void run() {
+                    Toast.makeText(mContext, message, Toast.LENGTH_SHORT).show();
+                }
+            });
+            
+        }
+        
         return bundle;
     }
 
@@ -176,7 +176,7 @@ public class AccountAuthenticator extends AbstractAccountAuthenticator {
         /// check if required token is stored
         final AccountManager am = AccountManager.get(mContext);
         String accessToken;
-        if (authTokenType.equals(AUTH_TOKEN_TYPE_PASSWORD)) {
+        if (authTokenType.equals(AccountTypeUtils.getAuthTokenTypePass(MainApp.getAccountType()))) {
             accessToken = am.getPassword(account);
         } else {
             accessToken = am.peekAuthToken(account, authTokenType);
@@ -184,7 +184,7 @@ public class AccountAuthenticator extends AbstractAccountAuthenticator {
         if (accessToken != null) {
             final Bundle result = new Bundle();
             result.putString(AccountManager.KEY_ACCOUNT_NAME, account.name);
-            result.putString(AccountManager.KEY_ACCOUNT_TYPE, ACCOUNT_TYPE);
+            result.putString(AccountManager.KEY_ACCOUNT_TYPE, MainApp.getAccountType());
             result.putString(AccountManager.KEY_AUTHTOKEN, accessToken);
             return result;
         }
@@ -195,8 +195,7 @@ public class AccountAuthenticator extends AbstractAccountAuthenticator {
         intent.putExtra(KEY_AUTH_TOKEN_TYPE, authTokenType);
         intent.putExtra(KEY_LOGIN_OPTIONS, options);
         intent.putExtra(AuthenticatorActivity.EXTRA_ACCOUNT, account);
-        intent.putExtra(AuthenticatorActivity.EXTRA_ENFORCED_UPDATE, true);
-        intent.putExtra(AuthenticatorActivity.EXTRA_ACTION, AuthenticatorActivity.ACTION_UPDATE_TOKEN);
+        intent.putExtra(AuthenticatorActivity.EXTRA_ACTION, AuthenticatorActivity.ACTION_UPDATE_EXPIRED_TOKEN);
         
 
         final Bundle bundle = new Bundle();
@@ -249,18 +248,18 @@ public class AccountAuthenticator extends AbstractAccountAuthenticator {
 
     private void validateAccountType(String type)
             throws UnsupportedAccountTypeException {
-        if (!type.equals(ACCOUNT_TYPE)) {
+        if (!type.equals(MainApp.getAccountType())) {
             throw new UnsupportedAccountTypeException();
         }
     }
 
     private void validateAuthTokenType(String authTokenType)
             throws UnsupportedAuthTokenTypeException {
-        if (!authTokenType.equals(AUTH_TOKEN_TYPE) &&
-            !authTokenType.equals(AUTH_TOKEN_TYPE_PASSWORD) &&
-            !authTokenType.equals(AUTH_TOKEN_TYPE_ACCESS_TOKEN) &&
-            !authTokenType.equals(AUTH_TOKEN_TYPE_REFRESH_TOKEN) &&
-            !authTokenType.equals(AUTH_TOKEN_TYPE_SAML_WEB_SSO_SESSION_COOKIE)) {
+        if (!authTokenType.equals(MainApp.getAuthTokenType()) &&
+            !authTokenType.equals(AccountTypeUtils.getAuthTokenTypePass(MainApp.getAccountType())) &&
+            !authTokenType.equals(AccountTypeUtils.getAuthTokenTypeAccessToken(MainApp.getAccountType())) &&
+            !authTokenType.equals(AccountTypeUtils.getAuthTokenTypeRefreshToken(MainApp.getAccountType())) &&
+            !authTokenType.equals(AccountTypeUtils.getAuthTokenTypeSamlSessionCookie(MainApp.getAccountType()))) {
             throw new UnsupportedAuthTokenTypeException();
         }
     }

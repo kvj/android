@@ -18,11 +18,14 @@
 
 package com.owncloud.android.authentication;
 
-import com.owncloud.android.utils.OwnCloudVersion;
+import java.util.Locale;
+
+import com.owncloud.android.MainApp;
+import com.owncloud.android.lib.common.accounts.AccountTypeUtils;
+import com.owncloud.android.lib.resources.status.OwnCloudVersion;
 
 import android.accounts.Account;
 import android.accounts.AccountManager;
-import android.accounts.AccountsException;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.preference.PreferenceManager;
@@ -48,7 +51,7 @@ public class AccountUtils {
      */
     public static Account getCurrentOwnCloudAccount(Context context) {
         Account[] ocAccounts = AccountManager.get(context).getAccountsByType(
-                AccountAuthenticator.ACCOUNT_TYPE);
+                MainApp.getAccountType());
         Account defaultAccount = null;
 
         SharedPreferences appPreferences = PreferenceManager
@@ -77,11 +80,21 @@ public class AccountUtils {
     
     public static boolean exists(Account account, Context context) {
         Account[] ocAccounts = AccountManager.get(context).getAccountsByType(
-                AccountAuthenticator.ACCOUNT_TYPE);
+                MainApp.getAccountType());
 
         if (account != null && account.name != null) {
-            for (Account ac : ocAccounts) {
-                if (ac.name.equals(account.name)) {
+            int lastAtPos = account.name.lastIndexOf("@");
+            String hostAndPort = account.name.substring(lastAtPos + 1);
+            String username = account.name.substring(0, lastAtPos);
+            String otherHostAndPort, otherUsername;
+            Locale currentLocale = context.getResources().getConfiguration().locale;
+            for (Account otherAccount : ocAccounts) {
+                lastAtPos = otherAccount.name.lastIndexOf("@");
+                otherHostAndPort = otherAccount.name.substring(lastAtPos + 1);
+                otherUsername = otherAccount.name.substring(0, lastAtPos);
+                if (otherHostAndPort.equals(hostAndPort) &&
+                        otherUsername.toLowerCase(currentLocale).
+                            equals(username.toLowerCase(currentLocale))) {
                     return true;
                 }
             }
@@ -98,7 +111,7 @@ public class AccountUtils {
     public static boolean accountsAreSetup(Context context) {
         AccountManager accMan = AccountManager.get(context);
         Account[] accounts = accMan
-                .getAccountsByType(AccountAuthenticator.ACCOUNT_TYPE);
+                .getAccountsByType(MainApp.getAccountType());
         return accounts.length > 0;
     }
     
@@ -107,7 +120,7 @@ public class AccountUtils {
         boolean result = false;
         if (accountName != null) {
             Account[] ocAccounts = AccountManager.get(context).getAccountsByType(
-                    AccountAuthenticator.ACCOUNT_TYPE);
+                    MainApp.getAccountType());
             boolean found = false;
             for (Account account : ocAccounts) {
                 found = (account.name.equals(accountName));
@@ -126,30 +139,6 @@ public class AccountUtils {
     }
 
     /**
-     * 
-     * @param version version of owncloud
-     * @return webdav path for given OC version, null if OC version unknown
-     */
-    public static String getWebdavPath(OwnCloudVersion version, boolean supportsOAuth, boolean supportsSamlSso) {
-        if (version != null) {
-            if (supportsOAuth) {
-                return ODAV_PATH;
-            }
-            if (supportsSamlSso) {
-                return SAML_SSO_PATH;
-            }
-            if (version.compareTo(OwnCloudVersion.owncloud_v4) >= 0)
-                return WEBDAV_PATH_4_0;
-            if (version.compareTo(OwnCloudVersion.owncloud_v3) >= 0
-                    || version.compareTo(OwnCloudVersion.owncloud_v2) >= 0)
-                return WEBDAV_PATH_2_0;
-            if (version.compareTo(OwnCloudVersion.owncloud_v1) >= 0)
-                return WEBDAV_PATH_1_2;
-        }
-        return null;
-    }
-    
-    /**
      * Returns the proper URL path to access the WebDAV interface of an ownCloud server,
      * according to its version and the authorization method used.
      * 
@@ -159,10 +148,10 @@ public class AccountUtils {
      */
     public static String getWebdavPath(OwnCloudVersion version, String authTokenType) {
         if (version != null) {
-            if (AccountAuthenticator.AUTH_TOKEN_TYPE_ACCESS_TOKEN.equals(authTokenType)) {
+            if (AccountTypeUtils.getAuthTokenTypeAccessToken(MainApp.getAccountType()).equals(authTokenType)) {
                 return ODAV_PATH;
             }
-            if (AccountAuthenticator.AUTH_TOKEN_TYPE_SAML_WEB_SSO_SESSION_COOKIE.equals(authTokenType)) {
+            if (AccountTypeUtils.getAuthTokenTypeSamlSessionCookie(MainApp.getAccountType()).equals(authTokenType)) {
                 return SAML_SSO_PATH;
             }
             if (version.compareTo(OwnCloudVersion.owncloud_v4) >= 0)
@@ -176,44 +165,4 @@ public class AccountUtils {
         return null;
     }
     
-    /**
-     * Constructs full url to host and webdav resource basing on host version
-     * @param context
-     * @param account
-     * @return url or null on failure
-     * @throws AccountNotFoundException     When 'account' is unknown for the AccountManager
-     */
-    public static String constructFullURLForAccount(Context context, Account account) throws AccountNotFoundException {
-        AccountManager ama = AccountManager.get(context);
-        String baseurl = ama.getUserData(account, AccountAuthenticator.KEY_OC_BASE_URL);
-        String strver  = ama.getUserData(account, AccountAuthenticator.KEY_OC_VERSION);
-        boolean supportsOAuth = (ama.getUserData(account, AccountAuthenticator.KEY_SUPPORTS_OAUTH2) != null);
-        boolean supportsSamlSso = (ama.getUserData(account, AccountAuthenticator.KEY_SUPPORTS_SAML_WEB_SSO) != null);
-        OwnCloudVersion ver = new OwnCloudVersion(strver);
-        String webdavpath = getWebdavPath(ver, supportsOAuth, supportsSamlSso);
-
-        if (baseurl == null || webdavpath == null) 
-            throw new AccountNotFoundException(account, "Account not found", null);
-        
-        return baseurl + webdavpath;
-    }
-    
-    
-    public static class AccountNotFoundException extends AccountsException {
-        
-        /** Generated - should be refreshed every time the class changes!! */
-        private static final long serialVersionUID = -9013287181793186830L;
-        
-        private Account mFailedAccount; 
-                
-        public AccountNotFoundException(Account failedAccount, String message, Throwable cause) {
-            super(message, cause);
-            mFailedAccount = failedAccount;
-        }
-        
-        public Account getFailedAccount() {
-            return mFailedAccount;
-        }
-    }
-
 }

@@ -19,8 +19,13 @@ package com.owncloud.android.ui.preview;
 
 import java.lang.ref.WeakReference;
 
+import com.owncloud.android.R;
+import com.owncloud.android.datamodel.OCFile;
+import com.owncloud.android.files.services.FileDownloader.FileDownloaderBinder;
+import com.owncloud.android.ui.fragment.FileFragment;
+import com.owncloud.android.utils.Log_OC;
+
 import android.accounts.Account;
-import android.app.Activity;
 import android.os.Bundle;
 import android.support.v4.app.FragmentStatePagerAdapter;
 import android.view.LayoutInflater;
@@ -31,14 +36,8 @@ import android.widget.ImageButton;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
-import com.owncloud.android.datamodel.OCFile;
-import com.owncloud.android.files.services.FileDownloader.FileDownloaderBinder;
-import com.owncloud.android.ui.fragment.FileFragment;
+import com.owncloud.android.lib.common.network.OnDatatransferProgressListener;
 
-import com.owncloud.android.Log_OC;
-import com.owncloud.android.R;
-
-import eu.alefzero.webdav.OnDatatransferProgressListener;
 
 /**
  * This Fragment is used to monitor the progress of a file downloading.
@@ -51,8 +50,6 @@ public class FileDownloadFragment extends FileFragment implements OnClickListene
     public static final String EXTRA_ACCOUNT = "ACCOUNT";
     private static final String EXTRA_ERROR = "ERROR";
 
-    private FileFragment.ContainerActivity mContainerActivity;
-    
     private View mView;
     private Account mAccount;
     
@@ -139,33 +136,6 @@ public class FileDownloadFragment extends FileFragment implements OnClickListene
     }
     
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void onAttach(Activity activity) {
-        super.onAttach(activity);
-        try {
-            mContainerActivity = (ContainerActivity) activity;
-            
-        } catch (ClassCastException e) {
-            throw new ClassCastException(activity.toString() + " must implement " + FileFragment.ContainerActivity.class.getSimpleName());
-        }
-    }
-    
-    
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void onActivityCreated(Bundle savedInstanceState) {
-        super.onActivityCreated(savedInstanceState);
-        if (mAccount != null) {
-            //mStorageManager = new FileDataStorageManager(mAccount, getActivity().getApplicationContext().getContentResolver());;
-        }
-    }
-        
-
     @Override
     public void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
@@ -194,8 +164,8 @@ public class FileDownloadFragment extends FileFragment implements OnClickListene
     
     @Override
     public void onStop() {
-        super.onStop();
         leaveTransferProgress();
+        super.onStop();
     }
     
     @Override
@@ -217,19 +187,8 @@ public class FileDownloadFragment extends FileFragment implements OnClickListene
     public void onClick(View v) {
         switch (v.getId()) {
             case R.id.cancelBtn: {
-                FileDownloaderBinder downloaderBinder = mContainerActivity.getFileDownloaderBinder();
-                if (downloaderBinder != null && downloaderBinder.isDownloading(mAccount, getFile())) {
-                    downloaderBinder.cancel(mAccount, getFile());
-                    getActivity().finish(); // :)
-                    /*
-                    leaveTransferProgress();
-                    if (mFile.isDown()) {
-                        setButtonsForDown();
-                    } else {
-                        setButtonsForRemote();
-                    }
-                    */
-                }
+                mContainerActivity.getFileOperationsHelper().cancelTransference(getFile());
+                getActivity().finish();
                 break;
             }
             default:
@@ -352,11 +311,6 @@ public class FileDownloadFragment extends FileFragment implements OnClickListene
             mProgressBar = new WeakReference<ProgressBar>(progressBar);
         }
         
-        @Override
-        public void onTransferProgress(long progressRate) {
-            // old method, nothing here
-        };
-
         @Override
         public void onTransferProgress(long progressRate, long totalTransferredSoFar, long totalToTransfer, String filename) {
             int percent = (int)(100.0*((double)totalTransferredSoFar)/((double)totalToTransfer));

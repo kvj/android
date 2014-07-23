@@ -35,14 +35,15 @@ import android.widget.TextView;
 import com.actionbarsherlock.app.ActionBar;
 import com.actionbarsherlock.app.ActionBar.OnNavigationListener;
 import com.actionbarsherlock.view.MenuItem;
-import com.owncloud.android.ui.dialog.IndeterminateProgressDialog;
-import com.owncloud.android.ui.fragment.ConfirmationDialogFragment;
-import com.owncloud.android.ui.fragment.LocalFileListFragment;
-import com.owncloud.android.ui.fragment.ConfirmationDialogFragment.ConfirmationDialogFragmentListener;
-import com.owncloud.android.utils.FileStorageUtils;
-
-import com.owncloud.android.Log_OC;
 import com.owncloud.android.R;
+import com.owncloud.android.ui.dialog.ConfirmationDialogFragment;
+import com.owncloud.android.ui.dialog.IndeterminateProgressDialog;
+import com.owncloud.android.ui.dialog.ConfirmationDialogFragment.ConfirmationDialogFragmentListener;
+import com.owncloud.android.ui.fragment.LocalFileListFragment;
+import com.owncloud.android.utils.DisplayUtils;
+import com.owncloud.android.utils.FileStorageUtils;
+import com.owncloud.android.utils.Log_OC;
+
 
 /**
  * Displays local files and let the user choose what of them wants to upload
@@ -107,9 +108,11 @@ public class UploadFilesActivity extends FileActivity implements
         mCancelBtn.setOnClickListener(this);
         mUploadBtn = (Button) findViewById(R.id.upload_files_btn_upload);
         mUploadBtn.setOnClickListener(this);
+        
             
         // Action bar setup
         ActionBar actionBar = getSupportActionBar();
+        actionBar.setIcon(DisplayUtils.getSeasonalIconId());
         actionBar.setHomeButtonEnabled(true);   // mandatory since Android ICS, according to the official documentation
         actionBar.setDisplayHomeAsUpEnabled(mCurrentDir != null && mCurrentDir.getName() != null);
         actionBar.setDisplayShowTitleEnabled(false);
@@ -377,6 +380,7 @@ public class UploadFilesActivity extends FileActivity implements
 
     @Override
     protected void onAccountSet(boolean stateWasRecovered) {
+        super.onAccountSet(stateWasRecovered);
         if (getAccount() != null) {
             if (!mAccountOnCreation.equals(getAccount())) {
                 setResult(RESULT_CANCELED);
@@ -384,7 +388,6 @@ public class UploadFilesActivity extends FileActivity implements
             }
             
         } else {
-            Log_OC.wtf(TAG, "onAccountChanged was called with NULL account associated!");
             setResult(RESULT_CANCELED);
             finish();
         }

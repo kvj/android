@@ -19,9 +19,10 @@
 package com.owncloud.android.ui.fragment;
 
 import com.actionbarsherlock.app.SherlockFragment;
-import com.owncloud.android.Log_OC;
 import com.owncloud.android.R;
 import com.owncloud.android.ui.ExtendedListView;
+import com.owncloud.android.utils.Log_OC;
+
 
 import android.os.Bundle;
 import android.view.LayoutInflater;
