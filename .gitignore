@@ -32,3 +32,8 @@ tests/proguard-project.txt
 
 # Should not be commited inside this repo:
 actionbarsherlock/
+
+build/
+.idea/
+.gradle/
+*.iml

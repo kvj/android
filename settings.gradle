@@ -1,0 +1,3 @@
+include ':owncloud-android-library'
+
+// project(':minidns').projectDir = file('libs/minidns')
