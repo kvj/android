@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.widget.Toast;
 
+import com.owncloud.android.MainApp;
 import com.owncloud.android.R;
 import com.owncloud.android.authentication.AccountAuthenticator;
 import com.owncloud.android.authentication.AccountUtils;
@@ -27,11 +28,11 @@ public class ManualSyncReceiver extends BroadcastReceiver {
             // Not configured
             return;
         }
-        ContentResolver.cancelSync(null, AccountAuthenticator.AUTHORITY);
+        ContentResolver.cancelSync(null, MainApp.getAuthority());
         // cancel the current synchronizations of any ownCloud account
         Bundle bundle = new Bundle();
         bundle.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
-        ContentResolver.requestSync(account, AccountAuthenticator.AUTHORITY, bundle);
+        ContentResolver.requestSync(account, MainApp.getAuthority(), bundle);
         Toast.makeText(ctx, R.string.synchronization_started, Toast.LENGTH_SHORT).show();
     }
 
